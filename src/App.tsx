@@ -1,158 +1,67 @@
+import { useState } from "react";
 import "./styles.css";
+import { Dashboard } from "./components/Dashboard";
+import { Records } from "./components/Records";
+import { Devices } from "./components/Devices";
+import { Batches } from "./components/Batches";
+import { Sync } from "./components/Sync";
+import { ExportView } from "./components/ExportView";
+import { useStore } from "./store";
+import { pendingConflictCount, selectDashboard } from "./domain/selectors";
 
-const project = {
-  "id": "hxwl-09",
-  "port": 5109,
-  "title": "半导体洁净室巡检",
-  "subtitle": "洁净等级阈值、粒子计数与异常处理看板",
-  "stack": "React + Vite + TypeScript + CSS",
-  "theme": [
-    "#0f766e",
-    "#2563eb",
-    "#e11d48"
-  ],
-  "domain": "洁净室巡检",
-  "users": [
-    "巡检员",
-    "厂务工程师",
-    "班组长"
-  ],
-  "metrics": [
-    "粒子异常",
-    "压差异常",
-    "温湿度偏移",
-    "待处理"
-  ],
-  "filters": [
-    "ISO 5",
-    "ISO 6",
-    "ISO 7",
-    "黄光区"
-  ],
-  "fields": [
-    "房间编号",
-    "洁净等级",
-    "粒子计数",
-    "温湿度",
-    "压差",
-    "设备状态",
-    "处理备注"
-  ],
-  "records": [
-    [
-      "CR-1201",
-      "ISO 5",
-      "异常",
-      "0.5um粒子超限，已通知厂务"
-    ],
-    [
-      "CR-2107",
-      "ISO 6",
-      "稳定",
-      "压差15Pa，温湿度正常"
-    ],
-    [
-      "Y-0302",
-      "黄光区",
-      "关注",
-      "湿度接近上限"
-    ]
-  ]
-};
+const TABS = [
+  { id: "dashboard", label: "看板" },
+  { id: "records", label: "巡检记录" },
+  { id: "devices", label: "设备事件" },
+  { id: "batches", label: "复核批次" },
+  { id: "sync", label: "离线同步与审计" },
+  { id: "export", label: "导出" },
+] as const;
 
-const statusColors = ["status-ok", "status-watch", "status-danger"];
-
-function MetricCard({ label, value, index }: { label: string; value: string; index: number }) {
-  return (
-    <article className="metric-card">
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <i className={statusColors[index % statusColors.length]} />
-    </article>
-  );
-}
+type TabId = (typeof TABS)[number]["id"];
 
 function App() {
-  const values = project.metrics.map((metric: string, index: number) => {
-    const base = [84, 12, 31, 7][index % 4];
-    return String(base + index * 3);
-  });
+  const [tab, setTab] = useState<TabId>("dashboard");
+  const conflicts = useStore(pendingConflictCount);
+  const stats = useStore(selectDashboard);
 
   return (
     <main className="app-shell">
       <section className="hero">
         <div>
-          <p className="eyebrow">{project.id} · port {project.port}</p>
-          <h1>{project.title}</h1>
-          <p className="subtitle">{project.subtitle}</p>
+          <p className="eyebrow">hxwl-09 · 半导体洁净室巡检 · 可追溯流程</p>
+          <h1>离线合并 · 冲突双版本 · 设备失效重判 · 封存快照</h1>
+          <p className="subtitle">
+            巡检记录、设备事件、复核批次接成一条链：按房间/时间点/字段合并，同字段冲突保留两版进待复核；
+            设备停机或校准使关联记录失效并重判，异常关闭不再按旧版本统计，已封存快照不改；
+            两班撞点先到为准后到留草稿；写盘失败按完整批次只补未完成，审计不重复。
+          </p>
         </div>
         <div className="stack-card">
-          <span>技术栈</span>
-          <strong>{project.stack}</strong>
+          <span>当前状态</span>
+          <strong>
+            活动异常 {stats.danger} · 失效 {stats.void} · 待复核 {conflicts}
+          </strong>
+          <span className="dim small">草稿 {stats.drafts} · 失败会话 {stats.failedSessions} · 封存批次 {stats.openBatches ? `${stats.openBatches} 个进行中` : "—"}</span>
         </div>
       </section>
 
-      <section className="metrics-grid">
-        {project.metrics.map((metric: string, index: number) => (
-          <MetricCard key={metric} label={metric} value={values[index]} index={index} />
+      <nav className="tabs main-tabs">
+        {TABS.map((t) => (
+          <button key={t.id} className={tab === t.id ? "tab active" : "tab"} onClick={() => setTab(t.id)}>
+            {t.label}
+            {t.id === "batches" && conflicts > 0 ? <i className="tab-dot">{conflicts}</i> : null}
+            {t.id === "sync" && stats.failedSessions > 0 ? <i className="tab-dot danger">{stats.failedSessions}</i> : null}
+          </button>
         ))}
-      </section>
+      </nav>
 
-      <section className="workspace">
-        <aside className="panel narrow">
-          <h2>角色</h2>
-          <div className="chips">
-            {project.users.map((user: string) => (
-              <span key={user}>{user}</span>
-            ))}
-          </div>
-          <h2>筛选</h2>
-          <div className="chips muted">
-            {project.filters.map((filter: string) => (
-              <button key={filter}>{filter}</button>
-            ))}
-          </div>
-        </aside>
-
-        <section className="panel">
-          <div className="section-heading">
-            <div>
-              <p>{project.domain}</p>
-              <h2>记录字段</h2>
-            </div>
-            <button className="primary-action">新增记录</button>
-          </div>
-          <div className="field-grid">
-            {project.fields.map((field: string) => (
-              <label key={field}>
-                <span>{field}</span>
-                <input placeholder={"填写" + field} />
-              </label>
-            ))}
-          </div>
-        </section>
-      </section>
-
-      <section className="records panel">
-        <div className="section-heading">
-          <div>
-            <p>示例数据</p>
-            <h2>近期记录</h2>
-          </div>
-          <button>导出摘要</button>
-        </div>
-        <div className="record-list">
-          {project.records.map((record: string[], index: number) => (
-            <article key={record.join("-")} className="record-card">
-              <div className="record-index">{String(index + 1).padStart(2, "0")}</div>
-              <div>
-                <h3>{record[0]}</h3>
-                <p>{record.slice(1).join(" · ")}</p>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
+      {tab === "dashboard" ? <Dashboard /> : null}
+      {tab === "records" ? <Records /> : null}
+      {tab === "devices" ? <Devices /> : null}
+      {tab === "batches" ? <Batches /> : null}
+      {tab === "sync" ? <Sync /> : null}
+      {tab === "export" ? <ExportView /> : null}
     </main>
   );
 }
